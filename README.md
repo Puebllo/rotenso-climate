@@ -9,35 +9,38 @@ This project provides custom external component to control Rotenso AC and probab
 
 ## [Support](https://buymeacoffee.com/pabllo)
 
+> [!NOTE]
+> This project will be open-source forever. I did this component for my personal purposes but I think many other may benefit from it.
+> 
+> If you like this project and want to support it, you can consider [buying me a coffee](https://buymeacoffee.com/pabllo)
+> 
+> You can also support this project by letting me know, for which AC brands/models it also works
+> 
 ![image](https://github.com/user-attachments/assets/4af840c1-f809-4a2d-9668-7374ca7e2d52)
-
-This project will be open-source forever. I did this component for my personal purposes but I think many other may benefit from it.
-
-If you like this project and want to support it, you can consider [buying me a coffee](https://buymeacoffee.com/pabllo)
-
-You can also support this project by letting me know, for which AC brands/models it also works
-
+> 
 ## How I did this
 
 By reverse engineering hundreds of data packets from WiFi module ;) Change one option in SmartLife app at a time, observe changes in frames, and deduct meaning of bytes ( so far it works :) )
 
-## Tested with AC:
+## Tested with AC
 
 - [x] Rotenso Elis Series 3,5kW
+
 
 ## What's working
 
 - [x] Receiving state updates
 - [x] Mode selection (Off, Cool, Heat, Fan)
 - [x] Preset selection (Eco, Turbo)
-- [x] Fan speed (Auto, Low, Mid, High)
-- [x] Set temp at decimal (0.5\*C changes)
+- [x] Set fan speed (Auto, Low, Mid, High)
+- [x] Set temperature with decimal (0.5\*C changes)
 
 ## ToDo:
 
 ### ESPHome
 
 - [ ] Expose Dry Mode
+- [ ] Config repo, so ESPHome can fetch directly this component without manual upload to `config` dir
 
 ### Common AC functionality:
 
@@ -56,6 +59,39 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 - [ ] Self Clean
 - [ ] Gentle wind (vertical flaps close with extra steps)
 - [ ] Health (Air purification)
+
+## ESPHome setup
+1. Download/clone this repo
+2. In HomeAssistant Config directory, go to `esphome` and create there directory `custom_components` in which paste downloaded repo, rename folder to `rotenso`. See screen below
+
+![image](https://github.com/user-attachments/assets/f6d4a096-1f95-4391-a281-8e65f34b43cf)
+
+4. In ESPHome add following to yml:
+
+
+```yml
+
+external_components:
+  - source: 
+      type: local
+      path: "./custom_components"
+    components: [rotenso]
+
+uart:
+  id: uart_bus
+  tx_pin: 1 # default pin
+  rx_pin: 3 # default pin
+  baud_rate: 9600
+  parity: EVEN
+
+climate:
+  - platform: rotenso
+    uart_id: uart_bus
+    id: rotenso_climate
+    name: "Rotenso AC"
+```
+4. Flash firmware
+
 
 ## Hardware
 
