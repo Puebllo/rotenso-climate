@@ -4,6 +4,8 @@
 namespace esphome {
 namespace rotenso {
 
+  static const char *const TAG = "rotenso.climate";
+
 RotensoFrameBuilder::RotensoFrameBuilder() {
   frame_ = {0xBB, 0x00, 0x01, 0x03, 0x21, 0x00, 0x00,
             0x60,  // Power OFF by default
@@ -25,6 +27,8 @@ void RotensoFrameBuilder::from_climate_state(const climate::Climate *climate) {
 
   climate::ClimatePreset preset = climate->preset.has_value() ? *climate->preset : climate::CLIMATE_PRESET_NONE;
   frame_[8] = encode_mode_preset(climate->mode, preset);
+
+  set_fan_speed(climate->fan_mode.value_or(climate::CLIMATE_FAN_AUTO));
 
   encode_temperature(target_temp);
 }
@@ -89,10 +93,32 @@ void RotensoFrameBuilder::encode_temperature(float temperature) {
     uint8_t encoded_low_nibble = static_cast<uint8_t>((0xF + 16 - temp_int) & 0x0F);
     frame_[9] = 0x50 | encoded_low_nibble;
     
-    // Byte 11: Only bit 6 is used, rest is zero
-    // float decimal = temperature - temp_int;
-    // frame_[11] = (std::abs(decimal - 0.5f) < 0.01f) ? (1 << 6) : 0x00;
-    
+    // Byte 11: 0x0A if decimal is .5, else 0x08
+    float decimal = temperature - static_cast<float>(temp_int);
+    frame_[11] = (std::abs(decimal - 0.5f) < 0.01f) ? 0x0A : 0x08;
+}
+
+void RotensoFrameBuilder::set_fan_speed(climate::ClimateFanMode fan_mode) {
+  switch (fan_mode) {
+    case climate::CLIMATE_FAN_AUTO:
+      frame_[10] = 0x00;
+      break;
+    case climate::CLIMATE_FAN_LOW:  // silent / fan 1
+      frame_[10] = 0x02;
+      break;
+    case climate::CLIMATE_FAN_MEDIUM: // Fan 3
+      frame_[10] = 0x03;
+      break;
+    case climate::CLIMATE_FAN_HIGH: // Fan 5 / Turbo
+      frame_[10] = 0x05;
+      break;
+    default:
+      frame_[10] = 0x00;  // fallback to Auto
+      break;
+  }
+  
+  ESP_LOGD(TAG, "Fan mode set in ESPHome: %s -> Frame byte[10] = 0x%02X",
+    climate::climate_fan_mode_to_string(fan_mode), frame_[10]);
 }
 
 

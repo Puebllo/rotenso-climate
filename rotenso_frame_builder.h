@@ -23,6 +23,8 @@ class RotensoFrameBuilder {
   uint8_t encode_power(bool power);
   uint8_t encode_mode_preset(climate::ClimateMode mode, climate::ClimatePreset preset);
   void encode_temperature(float temp_c);
+  void set_fan_speed(climate::ClimateFanMode fan_mode);
+
 };
 
 }  // namespace rotenso

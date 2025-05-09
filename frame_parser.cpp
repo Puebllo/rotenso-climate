@@ -44,16 +44,16 @@ ParsedClimateState parse_heartbeat(const std::vector<uint8_t> &buffer) {
       }
 
     //parse fan speed
-    uint8_t fan_raw = (buffer[8] >> 4) & 0x0F;
-    switch (fan_raw) {
-      case 0x8: result.fan_mode = climate::CLIMATE_FAN_AUTO; break; // Fan Auto
-      case 0x9: result.fan_mode = climate::CLIMATE_FAN_LOW; break; // Fan 1
-      case 0xC: result.fan_mode = climate::CLIMATE_FAN_LOW; break; // Fan 2
-      case 0xA: result.fan_mode = climate::CLIMATE_FAN_MEDIUM; break; // Fan 3
-      case 0xD: result.fan_mode = climate::CLIMATE_FAN_HIGH; break;  // Map Fan 4 to HIGH
-      case 0xB: result.fan_mode = climate::CLIMATE_FAN_HIGH; break;  // Max fan
-      default: result.fan_mode = climate::CLIMATE_FAN_AUTO; break;
-    }
+    // uint8_t fan_raw = (buffer[8] >> 4) & 0x0F;
+    // switch (fan_raw) {
+    //   case 0x8: result.fan_mode = climate::CLIMATE_FAN_AUTO; break; // Fan Auto
+    //   case 0x9: result.fan_mode = climate::CLIMATE_FAN_LOW; break; // Fan 1 / Silent
+    //   case 0xC: result.fan_mode = climate::CLIMATE_FAN_LOW; break; // Fan 2
+    //   case 0xA: result.fan_mode = climate::CLIMATE_FAN_MEDIUM; break; // Fan 3
+    //   case 0xD: result.fan_mode = climate::CLIMATE_FAN_HIGH; break;  // Map Fan 4 to HIGH
+    //   case 0xB: result.fan_mode = climate::CLIMATE_FAN_HIGH; break;  // Max fan
+    //   default: result.fan_mode = climate::CLIMATE_FAN_AUTO; break;
+    // }
 
     //parse temperature
     uint8_t fan_temp_byte = buffer[8];
