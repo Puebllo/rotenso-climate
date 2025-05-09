@@ -66,7 +66,7 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 
 ![image](https://github.com/user-attachments/assets/f6d4a096-1f95-4391-a281-8e65f34b43cf)
 
-4. In ESPHome add following to yml:
+3. In ESPHome add following to yml:
 
 
 ```yml
@@ -90,7 +90,8 @@ climate:
     id: rotenso_climate
     name: "Rotenso AC"
 ```
-4. Flash firmware
+
+4. Flash firmware. Done
 
 
 ## Hardware
