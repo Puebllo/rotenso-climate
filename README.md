@@ -2,9 +2,10 @@
 
 This project provides custom external component to control Rotenso AC and probably other daughter-brands from TLC ACs ([midea component](https://esphome.io/components/climate/midea.html) is not working for this AC brand, completely different data packets).
 
-**It's still work in progress.**
-
-_I don't guarantee that using this external component won't damage your AC (It shouldn't though, if you send wrong data packet then AC won't even budge, ask me how I know it)_
+> [!WARNING]
+> **It's still work in progress.**
+> 
+> _I don't guarantee that using this external component won't damage your AC (It shouldn't though, if you send wrong data packet then AC won't even budge, ask me how I know it)_
 
 ## [Support](https://buymeacoffee.com/pabllo)
 
