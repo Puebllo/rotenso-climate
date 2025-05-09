@@ -86,81 +86,9 @@ namespace esphome
       }
 
       RotensoFrameBuilder builder;
-      builder.from_climate_state(this); // 'this' is your climate instance
+      builder.from_climate_state(this, call);
       auto frame = builder.build_frame();
       this->write_array(frame.data(), frame.size());
-
-      //   if (call.get_mode().has_value()) {
-      //     auto mode = *call.get_mode();
-      //     if (mode == climate::CLIMATE_MODE_OFF) {
-      //       send_turn_off();
-      //     } else {
-      //       send_turn_on();
-      //       send_set_mode(mode);
-      //     }
-      //     this->mode = mode;
-      //   }
-
-      //   if (call.get_target_temperature().has_value()) {
-      //     float temp = *call.get_target_temperature();
-      //     send_set_temperature(temp);
-      //     this->target_temperature = temp;
-      //   }
-
-      //   if (call.get_fan_mode().has_value()) {
-      //     send_set_fan_mode(*call.get_fan_mode());
-      //     this->fan_mode = *call.get_fan_mode();
-      //   }
-
-      //   if (call.get_preset().has_value()) {
-      //     this->preset_ = *call.get_preset();
-      //   }
-
-      //   this->preset = this->preset_;
-
-      //   publish_state();
-    }
-
-    void RotensoClimate::send_turn_on()
-    {
-      ESP_LOGD(TAG, "Sending UART command: Turn ON");
-      static const uint8_t on_packet[] = {0xBB, 0x00, 0x01, 0x0A, 0x03, 0x05, 0x00, 0x00, 0xB6};
-      this->write_array(on_packet, sizeof(on_packet));
-      this->flush();
-      delay(90);
-      static const uint8_t display_packet[] = {0xBB, 0x00, 0x01, 0x09, 0x02, 0x05, 0x00, 0xB4};
-      this->write_array(display_packet, sizeof(display_packet));
-      this->flush();
-    }
-
-    void RotensoClimate::send_turn_off()
-    {
-      ESP_LOGD(TAG, "Sending UART command: Turn OFF");
-      static const uint8_t off_packet[] = {0xBB, 0x00, 0x01, 0x0A, 0x03, 0x05, 0x00, 0x00, 0xB6};
-      this->write_array(off_packet, sizeof(off_packet));
-      this->flush();
-      delay(90);
-      static const uint8_t display_packet[] = {0xBB, 0x00, 0x01, 0x09, 0x02, 0x05, 0x00, 0xB4};
-      this->write_array(display_packet, sizeof(display_packet));
-      this->flush();
-    }
-
-    void RotensoClimate::send_set_temperature(float temperature)
-    {
-      ESP_LOGD(TAG, "Sending UART command: Set temperature to %.1f", temperature);
-      // TODO: Send actual UART command
-    }
-
-    void RotensoClimate::send_set_mode(climate::ClimateMode mode)
-    {
-      ESP_LOGD(TAG, "Sending UART command: Set mode to %d", mode);
-      // TODO: Send actual UART command
-    }
-
-    void RotensoClimate::send_set_fan_mode(climate::ClimateFanMode fan_mode)
-    {
-      ESP_LOGD(TAG, "Sending UART command: Set fan mode to %d", fan_mode);
-      // TODO: Send actual UART command
     }
 
     void RotensoClimate::send_heartbeat()

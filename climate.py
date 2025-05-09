@@ -3,10 +3,10 @@ import esphome.config_validation as cv
 from esphome.components import (
     uart, climate, sensor
     )
-#from esphome.components.climate import ClimateMode, ClimatePreset, ClimateSwingMode#, CLIMATE_VISUAL_SCHEMA
+from esphome.components.climate import ClimateMode, ClimatePreset, ClimateSwingMode
 
 from esphome.const import (
-    CONF_ID, CONF_UART_ID, CONF_NAME, CONF_DISABLED_BY_DEFAULT
+    CONF_ID, CONF_UART_ID, CONF_NAME, CONF_DISABLED_BY_DEFAULT, CONF_SUPPORTED_MODES,
     )
 
 CODEOWNERS = ["Pablo"]
@@ -16,12 +16,23 @@ AUTO_LOAD = ["sensor"]
 rotenso_ns = cg.esphome_ns.namespace('rotenso')
 RotensoClimate = rotenso_ns.class_('RotensoClimate', climate.Climate, cg.Component, uart.UARTDevice)
 
+ALLOWED_CLIMATE_MODES = {
+    "HEAT_COOL": ClimateMode.CLIMATE_MODE_HEAT_COOL,
+    "COOL": ClimateMode.CLIMATE_MODE_COOL,
+    "HEAT": ClimateMode.CLIMATE_MODE_HEAT,
+    "DRY": ClimateMode.CLIMATE_MODE_DRY,
+    "FAN_ONLY": ClimateMode.CLIMATE_MODE_FAN_ONLY,
+}
+
+validate_modes = cv.enum(ALLOWED_CLIMATE_MODES, upper=True)
+
+
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(RotensoClimate),
     cv.GenerateID(CONF_UART_ID): cv.use_id(uart.UARTComponent),
     cv.Required(CONF_NAME): cv.string,
-    cv.Optional(CONF_DISABLED_BY_DEFAULT, default=False): cv.boolean#,
-   # cv.Optional(CONF_VISUAL): climate.CLIMATE_VISUAL_SCHEMA
+    cv.Optional(CONF_DISABLED_BY_DEFAULT, default=False): cv.boolean,
+    cv.Optional(CONF_SUPPORTED_MODES): cv.ensure_list(validate_modes)
 }).extend(cv.COMPONENT_SCHEMA)
 
 

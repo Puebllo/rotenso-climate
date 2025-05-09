@@ -26,23 +26,28 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 
 ## What's working
 
-- [x] Preset and mode selection
-- [x] Fan speed
 - [x] Receiving state updates
+- [x] Mode selection (Off, Cool, Heat, Fan)
+- [x] Preset selection (Eco, Turbo)
+- [x] Fan speed (Auto, Low, Mid, High)
+- [x] Set temp at decimal (0.5\*C changes)
 
 ## ToDo:
 
-### Common functionality:
+### ESPHome
 
-- [ ] fix 0.5\*C changes
+- [ ] Expose Dry Mode
+
+### Common AC functionality:
+
 - [ ] Horizontal Flaps control
 - [ ] Vertical Flaps control
-- [ ] Custom Fan speed setting - (Fan speed from 1-5, auto)
-- [ ] Better logging
+- [ ] Custom Fan speed setting (Fan speed from 1-5, auto) instead of mapping to ESPHome default ones
 - [ ] On/Off display on indoor unit
+- [ ] On/Off Beeper
 - [ ] Function Sleep
 
-### For some units:
+### For some AC Units:
 
 - [ ] I Feel (reading temp from remote)
 - [ ] Smart 8\*C
@@ -57,7 +62,7 @@ tbc.
 
 ## Check for this WiFi module, if you have it, then it'll problably will work for you too
 
-My AC is using generic TLCWBR Tuya module so my guess is, that if your AC is using this module too, it should work
+My AC is using generic TLCWBR Tuya module so my guess is, that if your AC is using this module, then this component should work you too.
 
 [TCLWBR](https://developer.tuya.com/en/docs/iot/tclwbr-datasheet?id=Kcqmpgs2yc5c6)
 

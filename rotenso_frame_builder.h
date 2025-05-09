@@ -12,7 +12,7 @@ class RotensoFrameBuilder {
 
   RotensoFrameBuilder();
 
-  void from_climate_state(const climate::Climate *climate);
+  void from_climate_state(const climate::Climate *climate, const climate::ClimateCall &call);
 
   std::array<uint8_t, FRAME_LENGTH> build_frame();
 
