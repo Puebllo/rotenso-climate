@@ -14,7 +14,7 @@ This project provides custom external component to control Rotenso AC and probab
 > 
 > If you like this project and want to support it, you can consider [buying me a coffee](https://buymeacoffee.com/pabllo)
 > 
-> You can also support this project by letting me know, for which AC brands/models it also works
+> You can also support this project by letting me know, for which AC brands/models it also works -> [See](#check-for-this-wifi-module-if-you-have-it-then-itll-problably-will-work-for-you-too)
 > 
 ![image](https://github.com/user-attachments/assets/4af840c1-f809-4a2d-9668-7374ca7e2d52)
 > 
