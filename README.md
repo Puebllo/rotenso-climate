@@ -1,6 +1,6 @@
 # Rotenso AC ESPHome
 
-This project provides custom external component to control Rotenso AC and probably other daughter-brands from TLC ACs ([midea component](https://esphome.io/components/climate/midea.html) is not working for this AC brand, completely different data packets).
+This project provides custom external component to control Rotenso AC and probably other daughter-brands from TCL ACs ([midea component](https://esphome.io/components/climate/midea.html) is not working for this AC brand, completely different data packets).
 
 > [!WARNING]
 > **It's still work in progress.**
@@ -100,7 +100,7 @@ tbc.
 
 ## Check for this WiFi module, if you have it, then it'll problably will work for you too
 
-My AC is using generic TLCWBR Tuya module so my guess is, that if your AC is using this module, then this component should work you too.
+My AC is using generic TCLWBR Tuya module so my guess is, that if your AC is using this module, then this component should work you too.
 
 [TCLWBR](https://developer.tuya.com/en/docs/iot/tclwbr-datasheet?id=Kcqmpgs2yc5c6)
 
