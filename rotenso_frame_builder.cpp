@@ -10,16 +10,22 @@ namespace esphome
 
     RotensoFrameBuilder::RotensoFrameBuilder()
     {
-      frame_ = {0xBB, 0x00, 0x01, 0x03, 0x21, 0x00, 0x00,
-                0x60, // Power OFF by default
-                0x00, // Preset+Mode
-                0x18, // Temperature placeholder
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x80, 0x00, 0x00, 0x00,
-                0x00, 0x00};
+      frame_ = {
+          0xBB, 0x00, 0x01, 0x03, 0x21,
+          0x00, 0x00,
+          0x60, // Power OFF by default
+          0x00, // Preset+Mode
+          0x18, // Temperature
+          0x00, // Fan Speed
+          0x00, // Temperature decimal
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, // vertical swing
+          0x80, // horizontal swing
+          0x00, 0x00, 0x00, 0x00,
+          0x00 // checksum
+      };
     }
 
     void RotensoFrameBuilder::from_climate_state(const climate::Climate *climate, const climate::ClimateCall &call)
@@ -32,10 +38,21 @@ namespace esphome
       climate::ClimatePreset preset = climate->preset.has_value() ? *climate->preset : climate::CLIMATE_PRESET_NONE;
       frame_[8] = encode_mode_preset(climate->mode, preset);
 
-      climate::ClimateFanMode fan_mode = call.get_fan_mode().value_or(climate::CLIMATE_FAN_AUTO);
-      set_fan_speed(fan_mode);
+      // climate::ClimateFanMode fan_mode = call.get_fan_mode().value_or(climate::CLIMATE_FAN_AUTO);
+      climate::ClimateSwingMode swing_mode = climate->swing_mode;
+
+      if (call.get_fan_mode().has_value())
+      {
+        bool vertical_swing_moving = (swing_mode == climate::CLIMATE_SWING_VERTICAL || swing_mode == climate::CLIMATE_SWING_BOTH);
+        set_fan_speed(*call.get_fan_mode(), vertical_swing_moving);
+      }
 
       encode_temperature(target_temp);
+
+      if (call.get_swing_mode().has_value())
+      {
+        set_swing_mode(*call.get_swing_mode(), climate->fan_mode.value_or(climate::CLIMATE_FAN_AUTO));
+      }
     }
 
     uint8_t RotensoFrameBuilder::encode_power(bool power)
@@ -109,29 +126,99 @@ namespace esphome
       frame_[11] = (std::abs(decimal - 0.5f) < 0.01f) ? 0x0A : 0x08;
     }
 
-    void RotensoFrameBuilder::set_fan_speed(climate::ClimateFanMode fan_mode)
+    void RotensoFrameBuilder::set_fan_speed(climate::ClimateFanMode fan_mode, bool vertical_swing_moving)
     {
+      uint8_t fan_speed_bits;
+
       switch (fan_mode)
       {
       case climate::CLIMATE_FAN_AUTO:
-        frame_[10] = 0x00;
+        fan_speed_bits = 0b00000000;
         break;
-      case climate::CLIMATE_FAN_LOW: // silent / fan 1
-        frame_[10] = 0x02;
+      case climate::CLIMATE_FAN_LOW: // 0x02 silent / fan 1
+        fan_speed_bits = 0b00000010;
         break;
-      case climate::CLIMATE_FAN_MEDIUM: // Fan 3
-        frame_[10] = 0x03;
+      case climate::CLIMATE_FAN_MEDIUM: // 0x03 Fan 3
+        fan_speed_bits = 0b00000011;
         break;
-      case climate::CLIMATE_FAN_HIGH: // Fan 5 / Turbo
-        frame_[10] = 0x05;
+      case climate::CLIMATE_FAN_HIGH: // 0x05 Fan 5 / Turbo
+        fan_speed_bits = 0b00000101;
         break;
       default:
-        frame_[10] = 0x00; // fallback to Auto
+        fan_speed_bits = 0b00000000; // fallback to Auto
         break;
       }
 
-      ESP_LOGD(TAG, "Fan mode set in ESPHome: %s -> Frame byte[10] = 0x%02X",
-               climate::climate_fan_mode_to_string(fan_mode), frame_[10]);
+      // Set vertical swing bits (2–4) to 0b111 if moving, else 0
+      uint8_t vertical_swing_bits = vertical_swing_moving ? 0b00111000 : 0x00;
+
+      // Combine both
+      frame_[10] = vertical_swing_bits | fan_speed_bits;
+
+      ESP_LOGD(TAG, "Fan mode: %s, Vertical swing moving: %s -> Frame[10] = 0x%02X",
+               climate::climate_fan_mode_to_string(fan_mode),
+               vertical_swing_moving ? "true" : "false",
+               frame_[10]);
+    }
+
+    void RotensoFrameBuilder::set_swing_mode(climate::ClimateSwingMode swing, climate::ClimateFanMode fan_mode)
+    {
+      uint8_t fan_speed_bits;
+
+      switch (fan_mode)
+      {
+      case climate::CLIMATE_FAN_AUTO:
+        fan_speed_bits = 0b00000000;
+        break;
+      case climate::CLIMATE_FAN_LOW: // 0x02 silent / fan 1
+        fan_speed_bits = 0b00000010;
+        break;
+      case climate::CLIMATE_FAN_MEDIUM: // 0x03 Fan 3
+        fan_speed_bits = 0b00000011;
+        break;
+      case climate::CLIMATE_FAN_HIGH: // 0x05 Fan 5 / Turbo
+        fan_speed_bits = 0b00000101;
+        break;
+      default:
+        fan_speed_bits = 0b00000000; // fallback to Auto
+        break;
+      }
+
+      uint8_t swing_bits = 0x00;
+      switch (swing)
+      {
+      case climate::CLIMATE_SWING_OFF:
+        frame_[32] = 0x00;
+        frame_[33] = 0x80;
+        break;
+      case climate::CLIMATE_SWING_VERTICAL:
+        swing_bits = 0b00111000; // Vertical swing active
+        frame_[32] = 0x08;
+        frame_[33] = 0x80;
+        break;
+      case climate::CLIMATE_SWING_HORIZONTAL:
+        swing_bits = 0x00;
+        frame_[32] = 0x00;
+        frame_[33] = 0x88;
+        break;
+      case climate::CLIMATE_SWING_BOTH:
+        swing_bits = 0b00111000; // Vertical swing active
+        frame_[32] = 0x08;
+        frame_[33] = 0x88;
+        break;
+      default:
+        swing_bits = 0x00; // No vertical swing
+        frame_[32] = 0x00;
+        frame_[33] = 0x80;
+        break;
+      }
+
+      // Combine preserved fan speed with new swing bits
+      frame_[10] = swing_bits | fan_speed_bits;
+
+      ESP_LOGD(TAG, "Swing mode encoded: %s -> Frame[10]=0x%02X, Vert Frame[32]=0x%02X, Horz Frame[33]=0x%02X",
+               climate::climate_swing_mode_to_string(swing),
+               frame_[10], frame_[32], frame_[33]);
     }
 
     void RotensoFrameBuilder::update_checksum()

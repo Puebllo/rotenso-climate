@@ -60,8 +60,15 @@ namespace esphome
           climate::CLIMATE_PRESET_ECO,
           climate::CLIMATE_PRESET_BOOST,
       });
-      traits.set_supports_current_temperature(false);
 
+      traits.set_supported_swing_modes({
+          climate::CLIMATE_SWING_OFF,
+          climate::CLIMATE_SWING_HORIZONTAL,
+          climate::CLIMATE_SWING_VERTICAL,
+          climate::CLIMATE_SWING_BOTH,
+      });
+
+      traits.set_supports_current_temperature(false);
       traits.set_visual_min_temperature(16);
       traits.set_visual_max_temperature(31);
       traits.set_visual_temperature_step(0.5);
@@ -88,6 +95,18 @@ namespace esphome
       RotensoFrameBuilder builder;
       builder.from_climate_state(this, call);
       auto frame = builder.build_frame();
+
+      std::string log_line;
+      char byte_str[6];
+
+      for (size_t i = 0; i < frame.size(); i++)
+      {
+        snprintf(byte_str, sizeof(byte_str), "0x%02X ", frame[i]);
+        log_line += byte_str;
+      }
+
+      ESP_LOGD(TAG, "Frame built: %s", log_line.c_str());
+
       this->write_array(frame.data(), frame.size());
     }
 
@@ -142,8 +161,7 @@ namespace esphome
           this->mode = parsed.mode;
           this->fan_mode = parsed.fan_mode;
           this->target_temperature = parsed.temperature;
-          // fixme: this->current_temperature = parsed.temperature;
-
+          this->swing_mode = parsed.swing_mode;
           this->preset = parsed.preset;
           ESP_LOGI(TAG, "Updated climate state from heartbeat");
 

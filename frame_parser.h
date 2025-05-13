@@ -12,6 +12,8 @@ struct ParsedClimateState {
     esphome::climate::ClimateFanMode fan_mode;
     float temperature;
     esphome::climate::ClimatePreset preset = esphome::climate::CLIMATE_PRESET_NONE;
+    esphome::climate::ClimateSwingMode swing_mode = esphome::climate::CLIMATE_SWING_OFF;
+
 };
       
 
