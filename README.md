@@ -25,6 +25,7 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 ## Tested with AC
 
 - [x] Rotenso Elis Series 3,5kW
+- [ ] Rotenso Roni Series 3,5kW -> During tests !
 
 
 ## What's working
