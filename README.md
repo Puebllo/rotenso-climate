@@ -105,4 +105,7 @@ My AC is using generic TCLWBR Tuya module so my guess is, that if your AC is usi
 
 [TCLWBR](https://developer.tuya.com/en/docs/iot/tclwbr-datasheet?id=Kcqmpgs2yc5c6)
 
+![image](https://github.com/user-attachments/assets/ab24b9a1-d243-4316-a81d-9bce5a8e177e)
+
+
 ![image](https://github.com/user-attachments/assets/a02fddab-9535-4807-8265-efb2782c52a5)
