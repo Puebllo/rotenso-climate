@@ -37,9 +37,9 @@ CONFIG_SCHEMA = cv.Schema({
 
 
 CONFIG_SCHEMA = cv.All(
-    climate.CLIMATE_SCHEMA.extend(
+    climate.climate_schema(RotensoClimate)
+    .extend(
         {
-            cv.GenerateID(): cv.declare_id(RotensoClimate),
             cv.GenerateID(CONF_UART_ID): cv.use_id(uart.UARTComponent)
         }
     ).extend(cv.COMPONENT_SCHEMA)
