@@ -13,7 +13,9 @@ namespace esphome
     void RotensoClimate::setup()
     {
       ESP_LOGI(TAG, "Rotenso climate setup complete");
-      this->set_update_interval(3000);
+      this->set_interval("heartbeat", 3000, [this]() {
+        this->send_heartbeat();
+      });
     }
 
     void RotensoClimate::loop()
@@ -33,10 +35,7 @@ namespace esphome
       }
     }
 
-    void RotensoClimate::update()
-    {
-      send_heartbeat();
-    }
+    void RotensoClimate::update(){}
 
     climate::ClimateTraits RotensoClimate::traits()
     {
