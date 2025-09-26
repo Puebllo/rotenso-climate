@@ -21,11 +21,13 @@ This project provides custom external component to control Rotenso AC and probab
 ## How I did this
 
 By reverse engineering hundreds of data packets from WiFi module ;) Change one option in SmartLife app at a time, observe changes in frames, and deduct meaning of bytes ( so far it works :) )
-
+## Requirements
+- `ESPHome 2025.9` or higher
+  
 ## Tested with AC
 
 - [x] Rotenso Elis Series 3,5kW (Module TCLWBR 1.0.0)
-- [ ] Rotenso Roni Series 3,5kW (Module TCLWBR 1.0.0) -> During tests !
+- [x] Rotenso Roni Series 3,5kW (Module TCLWBR 1.0.0)
 
 
 ## What's working
