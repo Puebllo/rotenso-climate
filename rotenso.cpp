@@ -59,7 +59,6 @@ namespace esphome
           climate::CLIMATE_PRESET_ECO,
           climate::CLIMATE_PRESET_BOOST,
       });
-      traits.set_supports_current_temperature(false);
 
       traits.set_visual_min_temperature(16);
       traits.set_visual_max_temperature(31);
