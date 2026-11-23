@@ -113,7 +113,7 @@ Each climate entity automatically creates two Home Assistant select entities, na
 | Vertical | 1–5, where 1 is up and 5 is down | 1–3, 3–5, 1–5 |
 | Horizontal | 1–5, where 1 is left and 5 is right | 1–5, 1–3, 2–4, 3–5 |
 
-Vertical swing range labels retain their original meanings: 1–3 covers the lower half and 3–5 the upper half.
+Vertical swing range 1–3 covers the upper half and 3–5 the lower half.
 
 `Stopped` turns off movement without selecting a fixed position. `Unknown` is a status indicator used when the AC reports an unrecognized position or swing range; it is not a command. The selectors update from the AC's status, including changes made using the remote.
 

@@ -20,8 +20,8 @@ bool swing_state_from_option(bool vertical, const std::string &option, SwingStat
   }
   state.moving = true;
   if (option == "Swing 1-5") state.value = 0x08;
-  else if (option == "Swing 1-3") state.value = vertical ? 0x18 : 0x10;
-  else if (option == "Swing 3-5") state.value = vertical ? 0x10 : 0x20;
+  else if (option == "Swing 1-3") state.value = 0x10;
+  else if (option == "Swing 3-5") state.value = vertical ? 0x18 : 0x20;
   else if (!vertical && option == "Swing 2-4") state.value = 0x18;
   else return false;
   return true;
@@ -35,8 +35,8 @@ const char *swing_option_from_state(bool vertical, const SwingState &state) {
   }
   switch (state.value & (vertical ? 0x18 : 0x38)) {
     case 0x08: return "Swing 1-5";
-    case 0x10: return vertical ? "Swing 3-5" : "Swing 1-3";
-    case 0x18: return vertical ? "Swing 1-3" : "Swing 2-4";
+    case 0x10: return "Swing 1-3";
+    case 0x18: return vertical ? "Swing 3-5" : "Swing 2-4";
     case 0x20: return vertical ? "Unknown" : "Swing 3-5";
     default: return "Unknown";
   }
