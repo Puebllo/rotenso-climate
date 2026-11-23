@@ -12,8 +12,8 @@ static const char *const POSITION_OPTIONS[] = {
 bool swing_state_from_option(bool vertical, const std::string &option, SwingState &state) {
   for (uint8_t position = 0; position <= 5; position++) {
     if (option == POSITION_OPTIONS[position]) {
-      // In the captures, vertical 1 is down (wire value 5); horizontal 1 is left.
-      state.value = position == 0 ? 0 : vertical ? 6 - position : position;
+      // Fixed positions use wire values 1-5 on both axes.
+      state.value = position;
       state.moving = false;
       return true;
     }
@@ -31,7 +31,7 @@ const char *swing_option_from_state(bool vertical, const SwingState &state) {
   if (!state.moving) {
     uint8_t position = state.value & 0x07;
     if (position > 5) return "Unknown";
-    return POSITION_OPTIONS[position == 0 ? 0 : vertical ? 6 - position : position];
+    return POSITION_OPTIONS[position];
   }
   switch (state.value & (vertical ? 0x18 : 0x38)) {
     case 0x08: return "Swing 1-5";

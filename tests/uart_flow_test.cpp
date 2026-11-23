@@ -301,11 +301,11 @@ static void test_captured_swing_commands() {
       {true, "Swing 1-5",  0x3B, 0x00, 0x08, 0x80, 0x17},
       {true, "Swing 3-5",  0x3B, 0x00, 0x10, 0x80, 0x0F},
       {true, "Swing 1-3",  0x3B, 0x00, 0x18, 0x80, 0x07},
-      {true, "Position 1", 0x03, 0x00, 0x05, 0x80, 0x22},
-      {true, "Position 2", 0x03, 0x00, 0x04, 0x80, 0x23},
+      {true, "Position 1", 0x03, 0x00, 0x01, 0x80, 0x26},
+      {true, "Position 2", 0x03, 0x00, 0x02, 0x80, 0x25},
       {true, "Position 3", 0x03, 0x00, 0x03, 0x80, 0x24},
-      {true, "Position 4", 0x03, 0x00, 0x02, 0x80, 0x25},
-      {true, "Position 5", 0x03, 0x00, 0x01, 0x80, 0x26},
+      {true, "Position 4", 0x03, 0x00, 0x04, 0x80, 0x23},
+      {true, "Position 5", 0x03, 0x00, 0x05, 0x80, 0x22},
       {false, "Swing 1-5",  0x03, 0x08, 0x01, 0x88, 0x26},
       {false, "Swing 1-3",  0x03, 0x08, 0x01, 0x90, 0x3E},
       {false, "Swing 2-4",  0x03, 0x08, 0x01, 0x98, 0x36},
@@ -348,7 +348,7 @@ static void test_captured_swing_commands() {
 }
 
 static void test_captured_swing_response() {
-  // Heartbeat sheet row 60: vertical swing between positions 1 and 3.
+  // Heartbeat sheet row 60: vertical "Only Down" swing.
   const std::vector<uint8_t> captured = {
       0xBB, 0x01, 0x00, 0x03, 0x37, 0x04, 0x00, 0x31, 0xA4, 0x00,
       0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x69, 0x03, 0x88,
@@ -362,13 +362,13 @@ static void test_captured_swing_response() {
   assert(std::string(esphome::rotenso::swing_option_from_state(true, parsed.vertical_swing)) == "Swing 1-3");
   assert(std::string(esphome::rotenso::swing_option_from_state(false, parsed.horizontal_swing)) == "Stopped");
 
-  // Response bytes from Heartbeat rows 58-74, in the workbook's position numbering.
+  // Response bytes from Heartbeat rows 58-74, with the vertical positions relabeled.
   struct ResponseCase { bool vertical; uint8_t flags; uint8_t value; const char *option; };
   const ResponseCase cases[] = {
       {true, 0x40, 0x08, "Swing 1-5"}, {true, 0x40, 0x10, "Swing 3-5"},
-      {true, 0x40, 0x18, "Swing 1-3"}, {true, 0x00, 0x05, "Position 1"},
-      {true, 0x00, 0x04, "Position 2"}, {true, 0x00, 0x03, "Position 3"},
-      {true, 0x00, 0x02, "Position 4"}, {true, 0x00, 0x01, "Position 5"},
+      {true, 0x40, 0x18, "Swing 1-3"}, {true, 0x00, 0x05, "Position 5"},
+      {true, 0x00, 0x04, "Position 4"}, {true, 0x00, 0x03, "Position 3"},
+      {true, 0x00, 0x02, "Position 2"}, {true, 0x00, 0x01, "Position 1"},
       {false, 0x20, 0x08, "Swing 1-5"}, {false, 0x20, 0x10, "Swing 1-3"},
       {false, 0x20, 0x18, "Swing 2-4"}, {false, 0x20, 0x20, "Swing 3-5"},
       {false, 0x00, 0x01, "Position 1"}, {false, 0x00, 0x02, "Position 2"},
@@ -421,9 +421,9 @@ static void test_swing_queue_and_preservation() {
   tick(climate, 220);
   command = climate.transmitted.back();
   assert(command[9] == 0x56 && command[10] == 0x05 && command[11] == 0x0A);
-  assert(command[32] == 0x05 && command[33] == 0x98);
+  assert(command[32] == 0x01 && command[33] == 0x98);
   receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 25.5f, CLIMATE_PRESET_NONE,
-                          SwingState{0x05, false}, SwingState{0x18, true}), 230);
+                          SwingState{0x01, false}, SwingState{0x18, true}), 230);
   assert(vertical.state == "Position 1" && horizontal.state == "Swing 2-4");
   assert(climate.swing_mode == CLIMATE_SWING_HORIZONTAL);
 

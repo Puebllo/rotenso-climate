@@ -110,12 +110,27 @@ Each climate entity automatically creates two Home Assistant select entities, na
 
 | Vane | Fixed positions | Swing ranges |
 | --- | --- | --- |
-| Vertical | 1–5, where 1 is down and 5 is up | 1–3, 3–5, 1–5 |
+| Vertical | 1–5, where 1 is up and 5 is down | 1–3, 3–5, 1–5 |
 | Horizontal | 1–5, where 1 is left and 5 is right | 1–5, 1–3, 2–4, 3–5 |
+
+Vertical swing range labels retain their original meanings: 1–3 covers the lower half and 3–5 the upper half.
 
 `Stopped` turns off movement without selecting a fixed position. `Unknown` is a status indicator used when the AC reports an unrecognized position or swing range; it is not a command. The selectors update from the AC's status, including changes made using the remote.
 
 The climate entity also offers the standard Off, Vertical, Horizontal, and Both swing modes. Enabling an axis that was stopped uses its full 1–5 range; an axis that was already swinging keeps its selected range. Changes to temperature, mode, or fan speed preserve the reported vane settings.
+
+The detailed positions and ranges appear in the two **separate select entities**, not in the climate card's swing menu. In Home Assistant, open **Settings → Devices & services → ESPHome → your device** and look for the Vertical vane and Horizontal vane controls. You can add them to an Entities card alongside your climate entity:
+
+```yaml
+type: entities
+title: Rotenso AC
+entities:
+  - climate.rotenso_ac
+  - select.rotenso_ac_vertical_vane
+  - select.rotenso_ac_horizontal_vane
+```
+
+Replace these example entity IDs with the IDs shown for your device in Home Assistant. If the selects are missing, ensure the ESPHome configuration uses this version of the component, then rebuild and flash the firmware; updating the repository alone does not update an installed device.
 
 To customize the select names or assign IDs for ESPHome automations, add these optional entries under the existing climate configuration:
 
