@@ -2,6 +2,8 @@
 #include "frame_parser.h"
 #include "rotenso_frame_builder.h"
 #include "esphome/core/log.h"
+#include <algorithm>
+#include <cmath>
 
 namespace esphome
 {
@@ -9,29 +11,71 @@ namespace esphome
   {
 
     static const char *const TAG = "rotenso.climate";
+    static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 3000;
+    static constexpr uint32_t RESPONSE_TIMEOUT_MS = 1000;
+    static constexpr uint32_t RX_FRAME_TIMEOUT_MS = 500;
+    static constexpr uint32_t BUS_QUIET_MS = 50;
+    static constexpr uint8_t MAX_CONTROL_RETRIES = 1;
 
     void RotensoClimate::setup()
     {
       ESP_LOGI(TAG, "Rotenso climate setup complete");
-      this->set_interval("heartbeat", 3000, [this]() {
-        this->send_heartbeat();
-      });
+      this->last_bus_activity_ = millis() - BUS_QUIET_MS;
     }
 
     void RotensoClimate::loop()
     {
-      static int32_t response_start_time = -1;
+      this->parse_uart_response();
+      uint32_t now = millis();
 
-      if (response_start_time == -1 && this->available())
+      if (!this->rx_buffer_.empty() && now - this->last_rx_byte_ >= RX_FRAME_TIMEOUT_MS)
       {
-        response_start_time = millis();
-        ESP_LOGD(TAG, "UART data detected, waiting to collect full response...");
+        ESP_LOGW(TAG, "Incomplete UART frame; looking for the next frame");
+        this->rx_buffer_.erase(this->rx_buffer_.begin());
+        this->process_rx_buffer();
+        // A second incomplete candidate must also get a timeout, without blocking forever.
+        this->last_rx_byte_ = now;
       }
 
-      if (response_start_time != -1 && millis() - response_start_time >= 500)
+      // Do not transmit while the AC is sending a frame or immediately after bus activity.
+      if (!this->rx_buffer_.empty() || now - this->last_bus_activity_ < BUS_QUIET_MS)
+        return;
+
+      if (this->request_ != Request::NONE && now - this->request_started_ >= RESPONSE_TIMEOUT_MS)
       {
-        parse_uart_response();
-        response_start_time = -1;
+        if (this->request_ == Request::CONTROL && this->control_retries_ < MAX_CONTROL_RETRIES)
+        {
+          ESP_LOGW(TAG, "No control response; retrying once");
+          this->write_array(this->control_frame_.data(), this->control_frame_.size());
+          this->control_retries_++;
+          this->request_started_ = this->last_bus_activity_ = millis();
+        }
+        else
+        {
+          if (this->request_ == Request::CONTROL)
+          {
+            ESP_LOGW(TAG, "No control response after retry; requesting a fresh state");
+            this->need_status_refresh_ = true;
+            this->force_heartbeat_ = true;
+          }
+          else
+          {
+            ESP_LOGW(TAG, "No heartbeat response");
+          }
+          this->request_ = Request::NONE;
+        }
+      }
+
+      if (this->request_ != Request::NONE)
+        return;
+
+      if (this->pending_control_.any() && this->have_state_ && !this->need_status_refresh_)
+      {
+        this->send_control();
+      }
+      else if (this->force_heartbeat_ || now - this->last_heartbeat_ >= HEARTBEAT_INTERVAL_MS)
+      {
+        this->send_heartbeat();
       }
     }
 
@@ -70,23 +114,50 @@ namespace esphome
     {
       if (call.get_mode().has_value())
       {
-        this->mode = *call.get_mode();
+        this->pending_control_.has_mode = true;
+        this->pending_control_.mode = *call.get_mode();
       }
 
       if (call.get_target_temperature().has_value())
       {
-        this->target_temperature = *call.get_target_temperature();
+        this->pending_control_.has_temperature = true;
+        this->pending_control_.temperature = *call.get_target_temperature();
+      }
+
+      if (call.get_fan_mode().has_value())
+      {
+        this->pending_control_.has_fan_mode = true;
+        this->pending_control_.fan_mode = *call.get_fan_mode();
       }
 
       if (call.get_preset().has_value())
       {
-        this->preset = *call.get_preset();
+        this->pending_control_.has_preset = true;
+        this->pending_control_.preset = *call.get_preset();
       }
 
+      if (this->pending_control_.any())
+        ESP_LOGD(TAG, "Queued climate change%s", this->have_state_ ? "" : "; waiting for initial AC state");
+    }
+
+    void RotensoClimate::send_control()
+    {
+      this->in_flight_control_ = this->pending_control_;
+      this->pending_control_ = PendingControl{};
+
+      const auto &change = this->in_flight_control_;
       RotensoFrameBuilder builder;
-      builder.from_climate_state(this, call);
-      auto frame = builder.build_frame();
-      this->write_array(frame.data(), frame.size());
+      builder.from_climate_state(
+          change.has_mode ? change.mode : this->mode,
+          change.has_temperature ? change.temperature : this->target_temperature,
+          change.has_fan_mode ? change.fan_mode : this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO),
+          change.has_preset ? change.preset : this->preset.value_or(climate::CLIMATE_PRESET_NONE));
+      this->control_frame_ = builder.build_frame();
+      ESP_LOGD(TAG, "Sending climate control command");
+      this->write_array(this->control_frame_.data(), this->control_frame_.size());
+      this->request_ = Request::CONTROL;
+      this->control_retries_ = 0;
+      this->request_started_ = this->last_bus_activity_ = millis();
     }
 
     void RotensoClimate::send_heartbeat()
@@ -94,60 +165,120 @@ namespace esphome
       ESP_LOGD(TAG, "Sending UART heartbeat");
       static const uint8_t heartbeat_packet[] = {0xBB, 0x00, 0x01, 0x04, 0x02, 0x01, 0x00, 0xBD};
       this->write_array(heartbeat_packet, sizeof(heartbeat_packet));
-      this->flush();
-      delay(30);
+      this->request_ = Request::HEARTBEAT;
+      this->force_heartbeat_ = false;
+      this->request_started_ = this->last_bus_activity_ = this->last_heartbeat_ = millis();
     }
 
     void RotensoClimate::parse_uart_response()
     {
-      size_t len = this->available();
-      if (len == 0)
+      uint8_t byte;
+      while (this->available() && this->read_byte(&byte))
       {
+        this->last_rx_byte_ = this->last_bus_activity_ = millis();
+        this->rx_buffer_.push_back(byte);
+        this->process_rx_buffer();
+      }
+    }
+
+    void RotensoClimate::process_rx_buffer()
+    {
+      while (!this->rx_buffer_.empty())
+      {
+        auto start = std::find(this->rx_buffer_.begin(), this->rx_buffer_.end(), 0xBB);
+        this->rx_buffer_.erase(this->rx_buffer_.begin(), start);
+        if (this->rx_buffer_.size() < 3)
+          return;
+
+        if (this->rx_buffer_[1] != 0x01 || this->rx_buffer_[2] != 0x00)
+        {
+          this->rx_buffer_.erase(this->rx_buffer_.begin());
+          continue;
+        }
+        if (this->rx_buffer_.size() < 5)
+          return;
+
+        const size_t frame_length = static_cast<size_t>(this->rx_buffer_[4]) + 6;
+        if (this->rx_buffer_.size() < frame_length)
+          return;
+
+        uint8_t checksum = 0;
+        for (size_t i = 0; i < frame_length; i++)
+          checksum ^= this->rx_buffer_[i];
+        if (checksum != 0)
+        {
+          ESP_LOGW(TAG, "Invalid UART checksum; looking for the next frame");
+          this->rx_buffer_.erase(this->rx_buffer_.begin());
+          continue;
+        }
+
+        std::vector<uint8_t> frame(this->rx_buffer_.begin(), this->rx_buffer_.begin() + frame_length);
+        this->rx_buffer_.erase(this->rx_buffer_.begin(), this->rx_buffer_.begin() + frame_length);
+        this->handle_frame(frame);
+      }
+    }
+
+    void RotensoClimate::handle_frame(const std::vector<uint8_t> &frame)
+    {
+      ESP_LOGD(TAG, "Received UART frame: command 0x%02X, %u bytes", frame[3],
+               static_cast<unsigned>(frame.size()));
+      if (frame[3] != 0x03 && frame[3] != 0x04)
+        return;
+
+      auto parsed = parse_status(frame);
+      if (!parsed.valid)
+        return;
+
+      // A delayed poll can contain the state from before an outstanding SET.
+      if (this->request_ == Request::CONTROL && frame[3] == 0x04)
+      {
+        ESP_LOGD(TAG, "Ignoring heartbeat while awaiting a control response");
         return;
       }
 
-      std::vector<uint8_t> buffer;
-      buffer.reserve(len);
-
-      for (size_t i = 0; i < len; i++)
+      const bool control_response = this->request_ == Request::CONTROL && frame[3] == 0x03;
+      const bool refresh_after_retry = control_response && this->control_retries_ > 0;
+      if (control_response)
       {
-        uint8_t byte;
-        if (this->read_byte(&byte))
+        const auto &change = this->in_flight_control_;
+        if ((change.has_mode && change.mode != parsed.mode) ||
+            (change.has_temperature && std::fabs(change.temperature - parsed.temperature) > 0.01f) ||
+            (change.has_fan_mode && change.fan_mode != parsed.fan_mode) ||
+            (change.has_preset && change.preset != parsed.preset))
         {
-          buffer.push_back(byte);
+          ESP_LOGW(TAG, "AC control response differs from the requested state");
+          if (change.has_mode && change.mode != parsed.mode)
+            ESP_LOGW(TAG, "  Mode: requested %d, reported %d", static_cast<int>(change.mode), static_cast<int>(parsed.mode));
+          if (change.has_temperature && std::fabs(change.temperature - parsed.temperature) > 0.01f)
+            ESP_LOGW(TAG, "  Temperature: requested %.1f, reported %.1f", change.temperature, parsed.temperature);
+          if (change.has_fan_mode && change.fan_mode != parsed.fan_mode)
+            ESP_LOGW(TAG, "  Fan: requested %d, reported %d", static_cast<int>(change.fan_mode), static_cast<int>(parsed.fan_mode));
+          if (change.has_preset && change.preset != parsed.preset)
+            ESP_LOGW(TAG, "  Preset: requested %d, reported %d", static_cast<int>(change.preset), static_cast<int>(parsed.preset));
         }
       }
 
-      std::string log_line;
-      char byte_str[6];
+      this->mode = parsed.mode;
+      this->fan_mode = parsed.fan_mode;
+      this->target_temperature = parsed.temperature;
+      this->preset = parsed.preset;
+      this->have_state_ = true;
+      if (frame[3] == 0x04 || (control_response && !refresh_after_retry))
+        this->need_status_refresh_ = false;
 
-      for (size_t i = 0; i < buffer.size(); i++)
+      // A retried SET can produce two indistinguishable replies. Poll before the
+      // next SET so a late duplicate cannot be mistaken for its response.
+      if (refresh_after_retry)
       {
-        snprintf(byte_str, sizeof(byte_str), "0x%02X ", buffer[i]);
-        log_line += byte_str;
+        this->need_status_refresh_ = true;
+        this->force_heartbeat_ = true;
       }
 
-      ESP_LOGD(TAG, "UART response: %s", log_line.c_str());
+      if ((this->request_ == Request::HEARTBEAT && frame[3] == 0x04) ||
+          control_response)
+        this->request_ = Request::NONE;
 
-      // if buffer size is 61 and command type is Get 0x4 then we assume it's heartbeat response
-      //  (there is also buffer size 51 and command type 0x9 which is to figure out)
-
-      if (buffer.size() == 61 && buffer[3] == 0x04)
-      {
-        auto parsed = parse_heartbeat(buffer);
-        if (parsed.valid)
-        {
-          this->mode = parsed.mode;
-          this->fan_mode = parsed.fan_mode;
-          this->target_temperature = parsed.temperature;
-          // fixme: this->current_temperature = parsed.temperature;
-
-          this->preset = parsed.preset;
-          ESP_LOGI(TAG, "Updated climate state from heartbeat");
-
-          this->publish_state();
-        }
-      }
+      this->publish_state();
     }
 
   } // namespace rotenso

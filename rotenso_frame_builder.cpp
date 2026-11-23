@@ -1,5 +1,6 @@
 #include "rotenso_frame_builder.h"
 #include "esphome/core/log.h"
+#include <cmath>
 
 namespace esphome
 {
@@ -22,20 +23,13 @@ namespace esphome
                 0x00, 0x00};
     }
 
-    void RotensoFrameBuilder::from_climate_state(const climate::Climate *climate, const climate::ClimateCall &call)
+    void RotensoFrameBuilder::from_climate_state(climate::ClimateMode mode, float target_temperature,
+                                                climate::ClimateFanMode fan_mode, climate::ClimatePreset preset)
     {
-      bool is_on = climate->mode != climate::CLIMATE_MODE_OFF;
-      float target_temp = climate->target_temperature;
-
-      frame_[7] = encode_power(is_on);
-
-      climate::ClimatePreset preset = climate->preset.has_value() ? *climate->preset : climate::CLIMATE_PRESET_NONE;
-      frame_[8] = encode_mode_preset(climate->mode, preset);
-
-      climate::ClimateFanMode fan_mode = call.get_fan_mode().value_or(climate::CLIMATE_FAN_AUTO);
+      frame_[7] = encode_power(mode != climate::CLIMATE_MODE_OFF);
+      frame_[8] = encode_mode_preset(mode, preset);
       set_fan_speed(fan_mode);
-
-      encode_temperature(target_temp);
+      encode_temperature(target_temperature);
     }
 
     uint8_t RotensoFrameBuilder::encode_power(bool power)

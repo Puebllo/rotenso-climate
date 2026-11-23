@@ -12,7 +12,8 @@ class RotensoFrameBuilder {
 
   RotensoFrameBuilder();
 
-  void from_climate_state(const climate::Climate *climate, const climate::ClimateCall &call);
+  void from_climate_state(climate::ClimateMode mode, float target_temperature,
+                          climate::ClimateFanMode fan_mode, climate::ClimatePreset preset);
 
   std::array<uint8_t, FRAME_LENGTH> build_frame();
 

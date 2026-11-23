@@ -6,11 +6,12 @@ namespace rotenso {
 
 static const char *const TAG = "rotenso.parser";
 
-ParsedClimateState parse_heartbeat(const std::vector<uint8_t> &buffer) {
+ParsedClimateState parse_status(const std::vector<uint8_t> &buffer) {
     ParsedClimateState result;
   
-    if (buffer.size() != 61 || buffer[3] != 0x04) {
-      ESP_LOGW(TAG, "Invalid heartbeat packet");
+    // The AC uses the same state layout for SET (0x03) and GET (0x04) replies.
+    if (buffer.size() != 61 || (buffer[3] != 0x03 && buffer[3] != 0x04)) {
+      ESP_LOGW(TAG, "Invalid status packet");
       return result;
     }
   

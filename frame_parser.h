@@ -15,7 +15,7 @@ struct ParsedClimateState {
 };
       
 
-ParsedClimateState parse_heartbeat(const std::vector<uint8_t> &buffer);
+ParsedClimateState parse_status(const std::vector<uint8_t> &buffer);
 
 }  // namespace rotenso
 }  // namespace esphome

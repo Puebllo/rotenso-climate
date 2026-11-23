@@ -80,6 +80,11 @@ external_components:
       path: "./custom_components"
     components: [rotenso]
 
+# GPIO1/GPIO3 are also the default serial logger pins on an ESP8266.
+# Disable serial logging when the AC uses that UART (API logs still work).
+logger:
+  baud_rate: 0
+
 uart:
   id: uart_bus
   tx_pin: 1 # default pin
@@ -95,6 +100,10 @@ climate:
 ```
 
 4. Flash firmware. Done
+
+If you already have a `logger:` section, add `baud_rate: 0` to that section instead of adding a second one. Serial logging must be disabled whenever it shares the UART connected to the AC; otherwise log messages can interfere with the commands. Logs are still available over the ESPHome API.
+
+The component waits for a valid AC state before sending a change, and waits for the control response before sending the next change. If no control response arrives it retries once and then requests a fresh state. Look for `No control response` or `AC control response differs from the requested state` in the ESPHome logs when diagnosing a change that the AC does not apply.
 
 
 ## Hardware
