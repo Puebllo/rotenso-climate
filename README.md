@@ -37,6 +37,7 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 - [x] Preset selection (Eco, Turbo)
 - [x] Set fan speed (Auto, Low, Mid, High)
 - [x] Set temperature with decimal (0.5\*C changes)
+- [x] Vertical and horizontal vane position and swing range
 
 ## ToDo:
 
@@ -47,8 +48,6 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 
 ### Common AC functionality:
 
-- [ ] Horizontal Flaps control
-- [ ] Vertical Flaps control
 - [ ] Custom Fan speed setting (Fan speed from 1-5, auto) instead of mapping to ESPHome default ones
 - [ ] On/Off display on indoor unit
 - [ ] On/Off Beeper
@@ -104,6 +103,34 @@ climate:
 If you already have a `logger:` section, add `baud_rate: 0` to that section instead of adding a second one. Serial logging must be disabled whenever it shares the UART connected to the AC; otherwise log messages can interfere with the commands. Logs are still available over the ESPHome API.
 
 The component waits for a valid AC state before sending a change, and waits for the control response before sending the next change. If no control response arrives it retries once and then requests a fresh state. Look for `No control response` or `AC control response differs from the requested state` in the ESPHome logs when diagnosing a change that the AC does not apply.
+
+### Vane controls
+
+Each climate entity automatically creates two Home Assistant select entities, named `<climate name> Vertical vane` and `<climate name> Horizontal vane`. They expose these choices:
+
+| Vane | Fixed positions | Swing ranges |
+| --- | --- | --- |
+| Vertical | 1–5, where 1 is down and 5 is up | 1–3, 3–5, 1–5 |
+| Horizontal | 1–5, where 1 is left and 5 is right | 1–5, 1–3, 2–4, 3–5 |
+
+`Stopped` turns off movement without selecting a fixed position. `Unknown` is a status indicator used when the AC reports an unrecognized position or swing range; it is not a command. The selectors update from the AC's status, including changes made using the remote.
+
+The climate entity also offers the standard Off, Vertical, Horizontal, and Both swing modes. Enabling an axis that was stopped uses its full 1–5 range; an axis that was already swinging keeps its selected range. Changes to temperature, mode, or fan speed preserve the reported vane settings.
+
+To customize the select names or assign IDs for ESPHome automations, add these optional entries under the existing climate configuration:
+
+```yaml
+climate:
+  - platform: rotenso
+    uart_id: uart_bus
+    name: "Rotenso AC"
+    vertical_swing_select:
+      name: "Vertical vane"
+      id: vertical_vane
+    horizontal_swing_select:
+      name: "Horizontal vane"
+      id: horizontal_vane
+```
 
 
 ## Hardware

@@ -13,6 +13,7 @@ enum ClimateMode {
 };
 enum ClimateFanMode { CLIMATE_FAN_LOW, CLIMATE_FAN_MEDIUM, CLIMATE_FAN_HIGH, CLIMATE_FAN_AUTO };
 enum ClimatePreset { CLIMATE_PRESET_NONE, CLIMATE_PRESET_ECO, CLIMATE_PRESET_BOOST, CLIMATE_PRESET_COMFORT };
+enum ClimateSwingMode { CLIMATE_SWING_OFF, CLIMATE_SWING_VERTICAL, CLIMATE_SWING_HORIZONTAL, CLIMATE_SWING_BOTH };
 
 class ClimateCall {
  public:
@@ -20,11 +21,13 @@ class ClimateCall {
   std::optional<float> target_temperature;
   std::optional<ClimateFanMode> fan_mode;
   std::optional<ClimatePreset> preset;
+  std::optional<ClimateSwingMode> swing_mode;
 
   std::optional<ClimateMode> get_mode() const { return mode; }
   std::optional<float> get_target_temperature() const { return target_temperature; }
   std::optional<ClimateFanMode> get_fan_mode() const { return fan_mode; }
   std::optional<ClimatePreset> get_preset() const { return preset; }
+  std::optional<ClimateSwingMode> get_swing_mode() const { return swing_mode; }
 };
 
 class ClimateTraits {
@@ -32,6 +35,7 @@ class ClimateTraits {
   void set_supported_modes(std::initializer_list<ClimateMode>) {}
   void set_supported_fan_modes(std::initializer_list<ClimateFanMode>) {}
   void set_supported_presets(std::initializer_list<ClimatePreset>) {}
+  void set_supported_swing_modes(std::initializer_list<ClimateSwingMode>) {}
   void set_visual_min_temperature(float) {}
   void set_visual_max_temperature(float) {}
   void set_visual_temperature_step(float) {}
@@ -44,6 +48,7 @@ class Climate {
   float target_temperature{NAN};
   std::optional<ClimateFanMode> fan_mode;
   std::optional<ClimatePreset> preset;
+  ClimateSwingMode swing_mode{CLIMATE_SWING_OFF};
   unsigned published_states{0};
   void publish_state() { published_states++; }
 

@@ -104,6 +104,13 @@ namespace esphome
           climate::CLIMATE_PRESET_BOOST,
       });
 
+      traits.set_supported_swing_modes({
+          climate::CLIMATE_SWING_OFF,
+          climate::CLIMATE_SWING_VERTICAL,
+          climate::CLIMATE_SWING_HORIZONTAL,
+          climate::CLIMATE_SWING_BOTH,
+      });
+
       traits.set_visual_min_temperature(16);
       traits.set_visual_max_temperature(31);
       traits.set_visual_temperature_step(0.5);
@@ -136,8 +143,51 @@ namespace esphome
         this->pending_control_.preset = *call.get_preset();
       }
 
+      if (call.get_swing_mode().has_value())
+      {
+        auto mode = *call.get_swing_mode();
+        auto vertical = this->get_desired_swing_state(true);
+        auto horizontal = this->get_desired_swing_state(false);
+        bool vertical_on = mode == climate::CLIMATE_SWING_VERTICAL || mode == climate::CLIMATE_SWING_BOTH;
+        bool horizontal_on = mode == climate::CLIMATE_SWING_HORIZONTAL || mode == climate::CLIMATE_SWING_BOTH;
+        // Preserve a selected range when it is already moving; otherwise use 1-5.
+        if (vertical_on != vertical.moving)
+          vertical.value = vertical_on ? 0x08 : vertical.value & 0x07;
+        if (horizontal_on != horizontal.moving)
+          horizontal.value = horizontal_on ? 0x08 : horizontal.value & 0x07;
+        vertical.moving = vertical_on;
+        horizontal.moving = horizontal_on;
+        this->set_swing_state(true, vertical);
+        this->set_swing_state(false, horizontal);
+      }
+
       if (this->pending_control_.any())
         ESP_LOGD(TAG, "Queued climate change%s", this->have_state_ ? "" : "; waiting for initial AC state");
+    }
+
+    void RotensoClimate::set_swing_state(bool vertical, const SwingState &state)
+    {
+      if (vertical)
+      {
+        this->pending_control_.has_vertical_swing = true;
+        this->pending_control_.vertical_swing = state;
+      }
+      else
+      {
+        this->pending_control_.has_horizontal_swing = true;
+        this->pending_control_.horizontal_swing = state;
+      }
+      ESP_LOGD(TAG, "Queued %s louver change", vertical ? "vertical" : "horizontal");
+    }
+
+    SwingState RotensoClimate::get_desired_swing_state(bool vertical) const
+    {
+      if (vertical ? this->pending_control_.has_vertical_swing : this->pending_control_.has_horizontal_swing)
+        return vertical ? this->pending_control_.vertical_swing : this->pending_control_.horizontal_swing;
+      if (this->request_ == Request::CONTROL &&
+          (vertical ? this->in_flight_control_.has_vertical_swing : this->in_flight_control_.has_horizontal_swing))
+        return vertical ? this->in_flight_control_.vertical_swing : this->in_flight_control_.horizontal_swing;
+      return this->get_swing_state(vertical);
     }
 
     void RotensoClimate::send_control()
@@ -151,7 +201,9 @@ namespace esphome
           change.has_mode ? change.mode : this->mode,
           change.has_temperature ? change.temperature : this->target_temperature,
           change.has_fan_mode ? change.fan_mode : this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO),
-          change.has_preset ? change.preset : this->preset.value_or(climate::CLIMATE_PRESET_NONE));
+          change.has_preset ? change.preset : this->preset.value_or(climate::CLIMATE_PRESET_NONE),
+          change.has_vertical_swing ? change.vertical_swing : this->vertical_swing_,
+          change.has_horizontal_swing ? change.horizontal_swing : this->horizontal_swing_);
       this->control_frame_ = builder.build_frame();
       ESP_LOGD(TAG, "Sending climate control command");
       this->write_array(this->control_frame_.data(), this->control_frame_.size());
@@ -244,7 +296,9 @@ namespace esphome
         if ((change.has_mode && change.mode != parsed.mode) ||
             (change.has_temperature && std::fabs(change.temperature - parsed.temperature) > 0.01f) ||
             (change.has_fan_mode && change.fan_mode != parsed.fan_mode) ||
-            (change.has_preset && change.preset != parsed.preset))
+            (change.has_preset && change.preset != parsed.preset) ||
+            (change.has_vertical_swing && !swing_states_match(true, change.vertical_swing, parsed.vertical_swing)) ||
+            (change.has_horizontal_swing && !swing_states_match(false, change.horizontal_swing, parsed.horizontal_swing)))
         {
           ESP_LOGW(TAG, "AC control response differs from the requested state");
           if (change.has_mode && change.mode != parsed.mode)
@@ -255,6 +309,10 @@ namespace esphome
             ESP_LOGW(TAG, "  Fan: requested %d, reported %d", static_cast<int>(change.fan_mode), static_cast<int>(parsed.fan_mode));
           if (change.has_preset && change.preset != parsed.preset)
             ESP_LOGW(TAG, "  Preset: requested %d, reported %d", static_cast<int>(change.preset), static_cast<int>(parsed.preset));
+          if (change.has_vertical_swing && !swing_states_match(true, change.vertical_swing, parsed.vertical_swing))
+            ESP_LOGW(TAG, "  Vertical louver: requested %s, reported %s", swing_option_from_state(true, change.vertical_swing), swing_option_from_state(true, parsed.vertical_swing));
+          if (change.has_horizontal_swing && !swing_states_match(false, change.horizontal_swing, parsed.horizontal_swing))
+            ESP_LOGW(TAG, "  Horizontal louver: requested %s, reported %s", swing_option_from_state(false, change.horizontal_swing), swing_option_from_state(false, parsed.horizontal_swing));
         }
       }
 
@@ -262,6 +320,15 @@ namespace esphome
       this->fan_mode = parsed.fan_mode;
       this->target_temperature = parsed.temperature;
       this->preset = parsed.preset;
+      this->vertical_swing_ = parsed.vertical_swing;
+      this->horizontal_swing_ = parsed.horizontal_swing;
+      this->swing_mode = parsed.vertical_swing.moving
+          ? (parsed.horizontal_swing.moving ? climate::CLIMATE_SWING_BOTH : climate::CLIMATE_SWING_VERTICAL)
+          : (parsed.horizontal_swing.moving ? climate::CLIMATE_SWING_HORIZONTAL : climate::CLIMATE_SWING_OFF);
+      if (this->vertical_swing_select_ != nullptr)
+        this->vertical_swing_select_->publish_swing_state(this->vertical_swing_);
+      if (this->horizontal_swing_select_ != nullptr)
+        this->horizontal_swing_select_->publish_swing_state(this->horizontal_swing_);
       this->have_state_ = true;
       if (frame[3] == 0x04 || (control_response && !refresh_after_retry))
         this->need_status_refresh_ = false;

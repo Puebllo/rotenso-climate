@@ -11,25 +11,29 @@ namespace esphome
 
     RotensoFrameBuilder::RotensoFrameBuilder()
     {
-      frame_ = {0xBB, 0x00, 0x01, 0x03, 0x21, 0x00, 0x00,
-                0x60, // Power OFF by default
-                0x00, // Preset+Mode
-                0x18, // Temperature placeholder
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x80, 0x00, 0x00, 0x00,
-                0x00, 0x00};
+      frame_.fill(0);
+      frame_[0] = 0xBB;
+      frame_[2] = 0x01;
+      frame_[3] = 0x03;
+      frame_[4] = 0x21;
+      frame_[7] = 0x60;  // Power off by default.
+      frame_[33] = 0x80; // Horizontal louver marker.
     }
 
     void RotensoFrameBuilder::from_climate_state(climate::ClimateMode mode, float target_temperature,
-                                                climate::ClimateFanMode fan_mode, climate::ClimatePreset preset)
+                                                climate::ClimateFanMode fan_mode, climate::ClimatePreset preset,
+                                                const SwingState &vertical_swing, const SwingState &horizontal_swing)
     {
       frame_[7] = encode_power(mode != climate::CLIMATE_MODE_OFF);
       frame_[8] = encode_mode_preset(mode, preset);
       set_fan_speed(fan_mode);
       encode_temperature(target_temperature);
+
+      // The movement bits share bytes with fan speed and the half-degree bit.
+      if (vertical_swing.moving) frame_[10] |= 0x38;
+      if (horizontal_swing.moving) frame_[11] |= 0x08;
+      frame_[32] = vertical_swing.value & 0x1F;
+      frame_[33] = 0x80 | (horizontal_swing.value & 0x3F);
     }
 
     uint8_t RotensoFrameBuilder::encode_power(bool power)
@@ -98,9 +102,9 @@ namespace esphome
       uint8_t encoded_low_nibble = static_cast<uint8_t>((0xF + 16 - temp_int) & 0x0F);
       frame_[9] = 0x50 | encoded_low_nibble;
 
-      // Byte 11: 0x0A if decimal is .5, else 0x08
+      // Byte 11 bit 1 is the half-degree flag; bit 3 controls horizontal swing.
       float decimal = temperature - static_cast<float>(temp_int);
-      frame_[11] = (std::abs(decimal - 0.5f) < 0.01f) ? 0x0A : 0x08;
+      frame_[11] = (std::abs(decimal - 0.5f) < 0.01f) ? 0x02 : 0x00;
     }
 
     void RotensoFrameBuilder::set_fan_speed(climate::ClimateFanMode fan_mode)
@@ -125,7 +129,7 @@ namespace esphome
       }
 
       ESP_LOGD(TAG, "Fan mode set in ESPHome: %s -> Frame byte[10] = 0x%02X",
-               climate::climate_fan_mode_to_string(fan_mode), frame_[10]);
+               LOG_STR_ARG(climate::climate_fan_mode_to_string(fan_mode)), frame_[10]);
     }
 
     void RotensoFrameBuilder::update_checksum()

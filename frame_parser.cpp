@@ -56,6 +56,10 @@ ParsedClimateState parse_status(const std::vector<uint8_t> &buffer) {
       default: result.fan_mode = climate::CLIMATE_FAN_AUTO; break;
     }
 
+    // Status byte 10 holds movement flags; bytes 51 and 52 hold range/position.
+    result.vertical_swing = {static_cast<uint8_t>(buffer[51] & 0x1F), (buffer[10] & 0x40) != 0};
+    result.horizontal_swing = {static_cast<uint8_t>(buffer[52] & 0x3F), (buffer[10] & 0x20) != 0};
+
     //parse temperature
     uint8_t fan_temp_byte = buffer[8];
     uint8_t temp_decimal_byte = buffer[9];
