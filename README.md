@@ -21,6 +21,9 @@ This project provides custom external component to control Rotenso AC and probab
 ## How I did this
 
 By reverse engineering hundreds of data packets from WiFi module ;) Change one option in SmartLife app at a time, observe changes in frames, and deduct meaning of bytes ( so far it works :) )
+
+For the current command and status byte maps, captured examples, and remaining unknowns, see [FRAME_MAP.md](FRAME_MAP.md). The original captured packets are in [Rotenso.xlsx](Rotenso.xlsx).
+
 ## Requirements
 - `ESPHome 2025.9` or higher
   
@@ -44,7 +47,6 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 ### ESPHome
 
 - [ ] Expose Dry Mode
-- [ ] Config repo, so ESPHome can fetch directly this component without manual upload to `config` dir
 
 ### Common AC functionality:
 
@@ -63,21 +65,11 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 - [ ] Health (Air purification)
 
 ## ESPHome setup
-1. Download/clone this repo
-2. In HomeAssistant Config directory, go to `esphome` and create there directory `custom_components` in which paste downloaded repo, rename folder to `rotenso`. See screen below
-
-![image](https://github.com/user-attachments/assets/f6d4a096-1f95-4391-a281-8e65f34b43cf)
-
-3. In ESPHome add following to yml:
-
+Add the component source, UART connection, and climate platform to your ESPHome device YAML. ESPHome downloads the component from GitHub when it validates or builds the configuration; you do not need to copy its files manually.
 
 ```yml
-
 external_components:
-  - source: 
-      type: local
-      path: "./custom_components"
-    components: [rotenso]
+  - source: github://Puebllo/rotenso-climate@new_swings
 
 # GPIO1/GPIO3 are also the default serial logger pins on an ESP8266.
 # Disable serial logging when the AC uses that UART (API logs still work).
@@ -98,11 +90,32 @@ climate:
     name: "Rotenso AC"
 ```
 
-4. Flash firmware. Done
+The example uses the `new_swings` branch. Once this component has been merged into the repository's default branch, you can omit `@new_swings` to use that branch instead:
+
+```yaml
+external_components:
+  - source: github://Puebllo/rotenso-climate
+```
+
+Adjust the UART pins for your hardware, then build and flash the firmware. ESPHome checks the Git repository for updates once a day by default; a component update takes effect on the device only after you rebuild and flash it. See [ESPHome external components](https://esphome.io/components/external_components/) for branch, tag, and refresh options.
 
 If you already have a `logger:` section, add `baud_rate: 0` to that section instead of adding a second one. Serial logging must be disabled whenever it shares the UART connected to the AC; otherwise log messages can interfere with the commands. Logs are still available over the ESPHome API.
 
 The component waits for a valid AC state before sending a change, and waits for the control response before sending the next change. If no control response arrives it retries once and then requests a fresh state. Look for `No control response` or `AC control response differs from the requested state` in the ESPHome logs when diagnosing a change that the AC does not apply.
+
+### Local installation
+
+To keep using a local component, copy the repository's `components/rotenso` directory to `custom_components/rotenso` beside your ESPHome YAML file. The `custom_components/rotenso` directory must directly contain `__init__.py`, `climate.py`, and the C++ files. Use this source in place of the GitHub source above:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: ./custom_components
+    components: [rotenso]
+```
+
+For an existing local installation, update the copied files from `components/rotenso` or switch to the GitHub source; copying the repository root into `custom_components/rotenso` will no longer work.
 
 ### Vane controls
 
