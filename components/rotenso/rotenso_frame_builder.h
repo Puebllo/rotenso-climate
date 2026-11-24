@@ -2,6 +2,7 @@
 
 #include <array>
 #include "esphome/components/climate/climate.h"
+#include "rotenso_swing.h"
 
 namespace esphome {
 namespace rotenso {
@@ -13,7 +14,8 @@ class RotensoFrameBuilder {
   RotensoFrameBuilder();
 
   void from_climate_state(climate::ClimateMode mode, float target_temperature,
-                          climate::ClimateFanMode fan_mode, climate::ClimatePreset preset);
+                          climate::ClimateFanMode fan_mode, climate::ClimatePreset preset,
+                          const SwingState &vertical_swing, const SwingState &horizontal_swing);
 
   std::array<uint8_t, FRAME_LENGTH> build_frame();
 

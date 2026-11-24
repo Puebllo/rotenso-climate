@@ -21,6 +21,9 @@ This project provides custom external component to control Rotenso AC and probab
 ## How I did this
 
 By reverse engineering hundreds of data packets from WiFi module ;) Change one option in SmartLife app at a time, observe changes in frames, and deduct meaning of bytes ( so far it works :) )
+
+For the current command and status byte maps, captured examples, and remaining unknowns, see [FRAME_MAP.md](FRAME_MAP.md). The original captured packets are in [Rotenso.xlsx](Rotenso.xlsx).
+
 ## Requirements
 - `ESPHome 2025.9` or higher
   
@@ -37,18 +40,16 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 - [x] Preset selection (Eco, Turbo)
 - [x] Set fan speed (Auto, Low, Mid, High)
 - [x] Set temperature with decimal (0.5\*C changes)
+- [x] Vertical and horizontal vane position and swing range
 
 ## ToDo:
 
 ### ESPHome
 
 - [ ] Expose Dry Mode
-- [ ] Config repo, so ESPHome can fetch directly this component without manual upload to `config` dir
 
 ### Common AC functionality:
 
-- [ ] Horizontal Flaps control
-- [ ] Vertical Flaps control
 - [ ] Custom Fan speed setting (Fan speed from 1-5, auto) instead of mapping to ESPHome default ones
 - [ ] On/Off display on indoor unit
 - [ ] On/Off Beeper
@@ -64,21 +65,11 @@ By reverse engineering hundreds of data packets from WiFi module ;) Change one o
 - [ ] Health (Air purification)
 
 ## ESPHome setup
-1. Download/clone this repo
-2. In HomeAssistant Config directory, go to `esphome` and create there directory `custom_components` in which paste downloaded repo, rename folder to `rotenso`. See screen below
-
-![image](https://github.com/user-attachments/assets/f6d4a096-1f95-4391-a281-8e65f34b43cf)
-
-3. In ESPHome add following to yml:
-
+Add the component source, UART connection, and climate platform to your ESPHome device YAML. ESPHome downloads the component from GitHub when it validates or builds the configuration; you do not need to copy its files manually.
 
 ```yml
-
 external_components:
-  - source: 
-      type: local
-      path: "./custom_components"
-    components: [rotenso]
+  - source: github://Puebllo/rotenso-climate@new_swings
 
 # GPIO1/GPIO3 are also the default serial logger pins on an ESP8266.
 # Disable serial logging when the AC uses that UART (API logs still work).
@@ -99,11 +90,75 @@ climate:
     name: "Rotenso AC"
 ```
 
-4. Flash firmware. Done
+The example uses the `new_swings` branch. Once this component has been merged into the repository's default branch, you can omit `@new_swings` to use that branch instead:
+
+```yaml
+external_components:
+  - source: github://Puebllo/rotenso-climate
+```
+
+Adjust the UART pins for your hardware, then build and flash the firmware. ESPHome checks the Git repository for updates once a day by default; a component update takes effect on the device only after you rebuild and flash it. See [ESPHome external components](https://esphome.io/components/external_components/) for branch, tag, and refresh options.
 
 If you already have a `logger:` section, add `baud_rate: 0` to that section instead of adding a second one. Serial logging must be disabled whenever it shares the UART connected to the AC; otherwise log messages can interfere with the commands. Logs are still available over the ESPHome API.
 
 The component waits for a valid AC state before sending a change, and waits for the control response before sending the next change. If no control response arrives it retries once and then requests a fresh state. Look for `No control response` or `AC control response differs from the requested state` in the ESPHome logs when diagnosing a change that the AC does not apply.
+
+### Local installation
+
+To keep using a local component, copy the repository's `components/rotenso` directory to `custom_components/rotenso` beside your ESPHome YAML file. The `custom_components/rotenso` directory must directly contain `__init__.py`, `climate.py`, and the C++ files. Use this source in place of the GitHub source above:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: ./custom_components
+    components: [rotenso]
+```
+
+For an existing local installation, update the copied files from `components/rotenso` or switch to the GitHub source; copying the repository root into `custom_components/rotenso` will no longer work.
+
+### Vane controls
+
+Each climate entity automatically creates two Home Assistant select entities, named `<climate name> Vertical vane` and `<climate name> Horizontal vane`. They expose these choices:
+
+| Vane | Fixed positions | Swing ranges |
+| --- | --- | --- |
+| Vertical | 1–5, where 1 is up and 5 is down | 1–3, 3–5, 1–5 |
+| Horizontal | 1–5, where 1 is left and 5 is right | 1–5, 1–3, 2–4, 3–5 |
+
+Vertical swing range 1–3 covers the upper half and 3–5 the lower half.
+
+`Stopped` turns off movement without selecting a fixed position. `Unknown` is a status indicator used when the AC reports an unrecognized position or swing range; it is not a command. The selectors update from the AC's status, including changes made using the remote.
+
+The climate entity also offers the standard Off, Vertical, Horizontal, and Both swing modes. Enabling an axis that was stopped uses its full 1–5 range; an axis that was already swinging keeps its selected range. Changes to temperature, mode, or fan speed preserve the reported vane settings.
+
+The detailed positions and ranges appear in the two **separate select entities**, not in the climate card's swing menu. In Home Assistant, open **Settings → Devices & services → ESPHome → your device** and look for the Vertical vane and Horizontal vane controls. You can add them to an Entities card alongside your climate entity:
+
+```yaml
+type: entities
+title: Rotenso AC
+entities:
+  - climate.rotenso_ac
+  - select.rotenso_ac_vertical_vane
+  - select.rotenso_ac_horizontal_vane
+```
+
+Replace these example entity IDs with the IDs shown for your device in Home Assistant. If the selects are missing, ensure the ESPHome configuration uses this version of the component, then rebuild and flash the firmware; updating the repository alone does not update an installed device.
+
+To customize the select names or assign IDs for ESPHome automations, add these optional entries under the existing climate configuration:
+
+```yaml
+climate:
+  - platform: rotenso
+    uart_id: uart_bus
+    name: "Rotenso AC"
+    vertical_swing_select:
+      name: "Vertical vane"
+      id: vertical_vane
+    horizontal_swing_select:
+      name: "Horizontal vane"
+      id: horizontal_vane
+```
 
 
 ## Hardware

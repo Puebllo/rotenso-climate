@@ -1,4 +1,5 @@
 #include "rotenso.h"
+#include "frame_parser.h"
 
 #include <cassert>
 #include <cstdint>
@@ -10,6 +11,9 @@ uint32_t fake_millis = 0;
 using namespace esphome;
 using namespace esphome::climate;
 using esphome::rotenso::RotensoClimate;
+using esphome::rotenso::RotensoFrameBuilder;
+using esphome::rotenso::RotensoSwingSelect;
+using esphome::rotenso::SwingState;
 
 class TestClimate : public RotensoClimate {
  public:
@@ -17,7 +21,8 @@ class TestClimate : public RotensoClimate {
 };
 
 static std::vector<uint8_t> status(uint8_t command, ClimateMode mode, ClimateFanMode fan,
-                                   float temperature, ClimatePreset preset = CLIMATE_PRESET_NONE) {
+                                   float temperature, ClimatePreset preset = CLIMATE_PRESET_NONE,
+                                   SwingState vertical = {}, SwingState horizontal = {}) {
   std::vector<uint8_t> frame(61, 0);
   frame[0] = 0xBB;
   frame[1] = 0x01;
@@ -34,6 +39,9 @@ static std::vector<uint8_t> status(uint8_t command, ClimateMode mode, ClimateFan
   int whole = static_cast<int>(temperature);
   frame[8] = fan_code | static_cast<uint8_t>(whole - 16);
   frame[9] = temperature - whole > 0.25f ? 0x02 : 0x00;
+  frame[10] = (vertical.moving ? 0x40 : 0) | (horizontal.moving ? 0x20 : 0);
+  frame[51] = vertical.value;
+  frame[52] = horizontal.value;
   for (size_t i = 0; i + 1 < frame.size(); i++) frame.back() ^= frame[i];
   return frame;
 }
@@ -90,7 +98,7 @@ static void test_initial_state_fragmentation_and_preserved_fan() {
   const auto &command = climate.transmitted.back();
   assert(command.size() == 39 && command[3] == 0x03);
   assert(command[7] == 0x64 && command[8] == 0x01);
-  assert(command[9] == 0x55 && command[10] == 0x05 && command[11] == 0x08);
+  assert(command[9] == 0x55 && command[10] == 0x05 && command[11] == 0x00);
   assert_checksum(command);
 
   receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 26.0f), 180);
@@ -121,7 +129,7 @@ static void test_rapid_changes_and_old_heartbeat() {
   tick(climate, 230);
   assert(climate.transmitted.size() == 3);
   const auto &command = climate.transmitted.back();
-  assert(command[8] == 0x01 && command[9] == 0x56 && command[10] == 0x05 && command[11] == 0x0A);
+  assert(command[8] == 0x01 && command[9] == 0x56 && command[10] == 0x05 && command[11] == 0x02);
   assert_checksum(command);
   receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 25.5f), 240);
   assert(climate.published_states == 3 && climate.target_temperature == 25.5f);
@@ -272,6 +280,189 @@ static void test_millis_wraparound() {
   assert(climate.transmitted.size() == 2 && climate.transmitted.back()[3] == 0x03);
 }
 
+static void test_captured_swing_commands() {
+  // SetCommand rows 19-36 in the supplied workbook, including their checksums.
+  const std::array<uint8_t, 39> baseline = {
+      0xBB, 0x00, 0x01, 0x03, 0x21, 0x00, 0x00, 0x64, 0x03, 0x5B,
+      0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x27};
+  struct Capture {
+    bool vertical;
+    const char *option;
+    uint8_t fan_byte;
+    uint8_t temperature_swing_byte;
+    uint8_t vertical_byte;
+    uint8_t horizontal_byte;
+    uint8_t checksum;
+  };
+  const Capture captures[] = {
+      {true, "Stopped",    0x03, 0x00, 0x00, 0x80, 0x27},
+      {true, "Swing 1-5",  0x3B, 0x00, 0x08, 0x80, 0x17},
+      {true, "Swing 1-3",  0x3B, 0x00, 0x10, 0x80, 0x0F},
+      {true, "Swing 3-5",  0x3B, 0x00, 0x18, 0x80, 0x07},
+      {true, "Position 1", 0x03, 0x00, 0x01, 0x80, 0x26},
+      {true, "Position 2", 0x03, 0x00, 0x02, 0x80, 0x25},
+      {true, "Position 3", 0x03, 0x00, 0x03, 0x80, 0x24},
+      {true, "Position 4", 0x03, 0x00, 0x04, 0x80, 0x23},
+      {true, "Position 5", 0x03, 0x00, 0x05, 0x80, 0x22},
+      {false, "Swing 1-5",  0x03, 0x08, 0x01, 0x88, 0x26},
+      {false, "Swing 1-3",  0x03, 0x08, 0x01, 0x90, 0x3E},
+      {false, "Swing 2-4",  0x03, 0x08, 0x01, 0x98, 0x36},
+      {false, "Swing 3-5",  0x03, 0x08, 0x01, 0xA0, 0x0E},
+      {false, "Position 1", 0x03, 0x00, 0x00, 0x81, 0x26},
+      {false, "Position 2", 0x03, 0x00, 0x00, 0x82, 0x25},
+      {false, "Position 3", 0x03, 0x00, 0x00, 0x83, 0x24},
+      {false, "Position 4", 0x03, 0x00, 0x00, 0x84, 0x23},
+      {false, "Position 5", 0x03, 0x00, 0x00, 0x85, 0x22},
+  };
+  for (const auto &capture : captures) {
+    SwingState requested;
+    assert(esphome::rotenso::swing_state_from_option(capture.vertical, capture.option, requested));
+    SwingState vertical = capture.vertical ? requested : SwingState{capture.vertical_byte, false};
+    SwingState horizontal = capture.vertical ? SwingState{} : requested;
+    RotensoFrameBuilder builder;
+    builder.from_climate_state(CLIMATE_MODE_COOL, 20, CLIMATE_FAN_MEDIUM, CLIMATE_PRESET_NONE,
+                               vertical, horizontal);
+    auto expected = baseline;
+    expected[10] = capture.fan_byte;
+    expected[11] = capture.temperature_swing_byte;
+    expected[32] = capture.vertical_byte;
+    expected[33] = capture.horizontal_byte;
+    expected[38] = capture.checksum;
+    assert(builder.build_frame() == expected);
+    assert(std::string(esphome::rotenso::swing_option_from_state(capture.vertical, requested)) == capture.option);
+  }
+
+  // SetCommand row 5: both axes moving with a half-degree target.
+  RotensoFrameBuilder builder;
+  builder.from_climate_state(CLIMATE_MODE_COOL, 20.5f, CLIMATE_FAN_HIGH, CLIMATE_PRESET_NONE,
+                             SwingState{0x08, true}, SwingState{0x08, true});
+  auto expected = baseline;
+  expected[10] = 0x3D;
+  expected[11] = 0x0A;
+  expected[32] = 0x08;
+  expected[33] = 0x88;
+  expected[38] = 0x13;
+  assert(builder.build_frame() == expected);
+}
+
+static void test_captured_swing_response() {
+  // Heartbeat sheet row 60: vertical "Only Down" swing.
+  const std::vector<uint8_t> captured = {
+      0xBB, 0x01, 0x00, 0x03, 0x37, 0x04, 0x00, 0x31, 0xA4, 0x00,
+      0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x69, 0x03, 0x88,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x69, 0xFF, 0x42, 0x00, 0x73, 0x29, 0x2A, 0x2C, 0x23, 0x1C,
+      0x8A, 0x00, 0x00, 0x00, 0x00, 0xEF, 0x00, 0x00, 0x00, 0x44,
+      0x40, 0x18, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, 0x00, 0x09};
+  assert_checksum(captured);
+  auto parsed = esphome::rotenso::parse_status(captured);
+  assert(parsed.valid && parsed.vertical_swing.moving && !parsed.horizontal_swing.moving);
+  assert(std::string(esphome::rotenso::swing_option_from_state(true, parsed.vertical_swing)) == "Swing 3-5");
+  assert(std::string(esphome::rotenso::swing_option_from_state(false, parsed.horizontal_swing)) == "Stopped");
+
+  // Response bytes from Heartbeat rows 58-74, with the vertical positions relabeled.
+  struct ResponseCase { bool vertical; uint8_t flags; uint8_t value; const char *option; };
+  const ResponseCase cases[] = {
+      {true, 0x40, 0x08, "Swing 1-5"}, {true, 0x40, 0x10, "Swing 1-3"},
+      {true, 0x40, 0x18, "Swing 3-5"}, {true, 0x00, 0x05, "Position 5"},
+      {true, 0x00, 0x04, "Position 4"}, {true, 0x00, 0x03, "Position 3"},
+      {true, 0x00, 0x02, "Position 2"}, {true, 0x00, 0x01, "Position 1"},
+      {false, 0x20, 0x08, "Swing 1-5"}, {false, 0x20, 0x10, "Swing 1-3"},
+      {false, 0x20, 0x18, "Swing 2-4"}, {false, 0x20, 0x20, "Swing 3-5"},
+      {false, 0x00, 0x01, "Position 1"}, {false, 0x00, 0x02, "Position 2"},
+      {false, 0x00, 0x03, "Position 3"}, {false, 0x00, 0x04, "Position 4"},
+      {false, 0x00, 0x05, "Position 5"},
+  };
+  for (const auto &entry : cases) {
+    auto frame = captured;
+    frame[10] = entry.flags;
+    frame[51] = entry.vertical ? entry.value : 0;
+    frame[52] = entry.vertical ? 0 : entry.value;
+    frame.back() = 0;
+    for (size_t i = 0; i + 1 < frame.size(); i++) frame.back() ^= frame[i];
+    assert_checksum(frame);
+    auto result = esphome::rotenso::parse_status(frame);
+    const auto &swing = entry.vertical ? result.vertical_swing : result.horizontal_swing;
+    assert(result.valid && std::string(esphome::rotenso::swing_option_from_state(entry.vertical, swing)) == entry.option);
+  }
+  assert(esphome::rotenso::swing_states_match(true, SwingState{0x10, true}, SwingState{0x15, true}));
+  assert(!esphome::rotenso::swing_states_match(false, SwingState{0x10, true}, SwingState{0x18, true}));
+}
+
+static void test_swing_queue_and_preservation() {
+  fake_millis = 100;
+  TestClimate climate;
+  RotensoSwingSelect vertical;
+  RotensoSwingSelect horizontal;
+  climate.set_vertical_swing_select(&vertical);
+  climate.set_horizontal_swing_select(&horizontal);
+  climate.setup();
+  climate.loop();
+  receive(climate, status(0x04, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 24, CLIMATE_PRESET_NONE,
+                          SwingState{0x18, true}, SwingState{0x04, false}), 110);
+  assert(vertical.state == "Swing 3-5" && horizontal.state == "Position 4");
+  assert(climate.swing_mode == CLIMATE_SWING_VERTICAL);
+
+  horizontal.make_test_call("Swing 2-4");
+  tick(climate, 160);
+  auto command = climate.transmitted.back();
+  assert(command[10] == 0x3D && command[11] == 0x08 && command[32] == 0x18 && command[33] == 0x98);
+
+  // Queue a position and a temperature while the previous swing command is in flight.
+  vertical.make_test_call("Position 1");
+  ClimateCall temperature;
+  temperature.target_temperature = 25.5f;
+  climate.call(temperature);
+  receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 24, CLIMATE_PRESET_NONE,
+                          SwingState{0x18, true}, SwingState{0x18, true}), 170);
+  assert(vertical.state == "Swing 3-5" && horizontal.state == "Swing 2-4");
+  tick(climate, 220);
+  command = climate.transmitted.back();
+  assert(command[9] == 0x56 && command[10] == 0x05 && command[11] == 0x0A);
+  assert(command[32] == 0x01 && command[33] == 0x98);
+  receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 25.5f, CLIMATE_PRESET_NONE,
+                          SwingState{0x01, false}, SwingState{0x18, true}), 230);
+  assert(vertical.state == "Position 1" && horizontal.state == "Swing 2-4");
+  assert(climate.swing_mode == CLIMATE_SWING_HORIZONTAL);
+
+  // Climate's generic BOTH mode enables the stationary axis without losing the other axis's range.
+  ClimateCall both;
+  both.swing_mode = CLIMATE_SWING_BOTH;
+  climate.call(both);
+  tick(climate, 280);
+  command = climate.transmitted.back();
+  assert(command[10] == 0x3D && command[11] == 0x0A && command[32] == 0x08 && command[33] == 0x98);
+  receive(climate, status(0x03, CLIMATE_MODE_HEAT, CLIMATE_FAN_HIGH, 25.5f, CLIMATE_PRESET_NONE,
+                          SwingState{0x08, true}, SwingState{0x18, true}), 290);
+  assert(climate.swing_mode == CLIMATE_SWING_BOTH);
+}
+
+static void test_unknown_swing_preserves_flags() {
+  fake_millis = 100;
+  TestClimate climate;
+  RotensoSwingSelect vertical;
+  RotensoSwingSelect horizontal;
+  climate.set_vertical_swing_select(&vertical);
+  climate.set_horizontal_swing_select(&horizontal);
+  climate.setup();
+  climate.loop();
+  receive(climate, status(0x04, CLIMATE_MODE_COOL, CLIMATE_FAN_LOW, 20, CLIMATE_PRESET_NONE,
+                          SwingState{0, true}, SwingState{0, true}), 110);
+  assert(vertical.state == "Unknown" && horizontal.state == "Unknown");
+  assert(climate.swing_mode == CLIMATE_SWING_BOTH);
+  ClimateCall change;
+  change.target_temperature = 21;
+  climate.call(change);
+  tick(climate, 160);
+  auto command = climate.transmitted.back();
+  assert(command[10] == 0x3A && command[11] == 0x08 && command[32] == 0x00 && command[33] == 0x80);
+  horizontal.make_test_call("Unknown");
+  tick(climate, 220);
+  assert(climate.transmitted.size() == 2);
+}
+
 int main() {
   test_initial_state_fragmentation_and_preserved_fan();
   test_rapid_changes_and_old_heartbeat();
@@ -281,5 +472,9 @@ int main() {
   test_corruption_and_timeout_resynchronization();
   test_retry_response_is_followed_by_fresh_poll();
   test_millis_wraparound();
+  test_captured_swing_commands();
+  test_captured_swing_response();
+  test_swing_queue_and_preservation();
+  test_unknown_swing_preserves_flags();
   std::cout << "UART flow tests passed\n";
 }
