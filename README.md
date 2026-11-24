@@ -69,7 +69,7 @@ Add the component source, UART connection, and climate platform to your ESPHome 
 
 ```yml
 external_components:
-  - source: github://Puebllo/rotenso-climate@new_swings
+  - source: github://Puebllo/rotenso-climate
 
 # GPIO1/GPIO3 are also the default serial logger pins on an ESP8266.
 # Disable serial logging when the AC uses that UART (API logs still work).
@@ -88,13 +88,6 @@ climate:
     uart_id: uart_bus
     id: rotenso_climate
     name: "Rotenso AC"
-```
-
-The example uses the `new_swings` branch. Once this component has been merged into the repository's default branch, you can omit `@new_swings` to use that branch instead:
-
-```yaml
-external_components:
-  - source: github://Puebllo/rotenso-climate
 ```
 
 Adjust the UART pins for your hardware, then build and flash the firmware. ESPHome checks the Git repository for updates once a day by default; a component update takes effect on the device only after you rebuild and flash it. See [ESPHome external components](https://esphome.io/components/external_components/) for branch, tag, and refresh options.
@@ -161,13 +154,9 @@ climate:
 ```
 
 
-## Hardware
-
-tbc.
-
 ## Check for this WiFi module, if you have it, then it'll problably will work for you too
 
-My AC is using generic TCLWBR Tuya module so my guess is, that if your AC is using this module, then this component should work you too.
+Tested AC's are using generic TCLWBR Tuya module so my guess is, that if your AC is using this module, then this component should work you too.
 
 [TCLWBR](https://developer.tuya.com/en/docs/iot/tclwbr-datasheet?id=Kcqmpgs2yc5c6)
 
