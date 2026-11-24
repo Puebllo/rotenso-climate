@@ -69,7 +69,7 @@ Add the component source, UART connection, and climate platform to your ESPHome 
 
 ```yml
 external_components:
-  - source: github://Puebllo/rotenso-climate
+  - source: github://pg-engineering/rotenso-climate
 
 # GPIO1/GPIO3 are also the default serial logger pins on an ESP8266.
 # Disable serial logging when the AC uses that UART (API logs still work).
